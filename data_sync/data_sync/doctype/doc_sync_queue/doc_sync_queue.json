@@ -59,10 +59,9 @@
   },
   {
    "fieldname": "ref_docname",
-   "fieldtype": "Dynamic Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Ref Docname",
-   "options": "ref_doctype",
    "reqd": 1,
    "search_index": 1
   },
@@ -164,10 +163,10 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-13 21:38:25.559139",
+ "modified": "2026-08-13 22:50:56.540940",
  "modified_by": "Administrator",
- "name": "Doc Sync Queue",
  "module": "Data Sync",
+ "name": "Doc Sync Queue",
  "owner": "Administrator",
  "permissions": [
   {
