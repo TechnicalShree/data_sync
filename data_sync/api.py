@@ -3,6 +3,7 @@
 """Endpoints the other server calls. Both require API key authentication."""
 
 import frappe
+from frappe.utils import now
 
 from data_sync import sync
 
@@ -51,4 +52,8 @@ def receive(doctype, docname, event, origin_site, idempotency_key, payload):
 	frappe.db.commit()
 	sync.apply_entry(entry.name)
 
-	return {"ok": True, "queue_entry": entry.name}
+	result = {"ok": True, "queue_entry": entry.name, "applied_on": now()}
+	entry.db_set("response", frappe.as_json(result), update_modified=False)
+	frappe.db.commit()
+
+	return result

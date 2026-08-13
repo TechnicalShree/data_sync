@@ -31,6 +31,13 @@ VOLATILE_FIELDS = {
 	"_seen",
 }
 
+# Audit fields. They are sent with the payload, but never handed to
+# insert()/update() - frappe overwrites owner/creation with the session user and
+# always stamps modified_by, and feeding it the remote `modified` would raise
+# TimestampMismatchError. They are written back with restore_audit_fields()
+# after the save so the synced document keeps the real originating user.
+AUDIT_FIELDS = ("owner", "creation", "modified", "modified_by")
+
 # DocTypes that must never sync, whatever the settings say.
 BLOCKED_DOCTYPES = {
 	"Doc Sync Queue",
@@ -213,16 +220,17 @@ def push_entry(entry_name):
 			timeout=cint(settings.request_timeout) or 30,
 		)
 	except Exception as e:
-		mark_failed(entry, f"{type(e).__name__}: {e}")
+		# No HTTP response at all (DNS, timeout, TLS) - log the traceback instead.
+		mark_failed(entry, f"{type(e).__name__}: {e}", response=frappe.get_traceback())
 		return
 
-	text = (response.text or "")[:8000]
+	log = format_response(response)
 	if response.status_code == 200:
 		entry.db_set(
 			{
 				"status": "Synced",
 				"error_reason": None,
-				"response": text,
+				"response": log,
 				"last_attempt_on": now_datetime(),
 				"synced_on": now_datetime(),
 			},
@@ -230,7 +238,35 @@ def push_entry(entry_name):
 		)
 		frappe.db.commit()
 	else:
-		mark_failed(entry, f"HTTP {response.status_code}", response=text)
+		mark_failed(entry, f"HTTP {response.status_code} {response.reason or ''}".strip(), response=log)
+
+
+# Hard ceiling so a runaway HTML error page cannot blow up the row.
+MAX_RESPONSE_LOG = 500_000
+
+
+def format_response(response):
+	"""Full response log for the queue row - status, headers and complete body."""
+	body = response.text or ""
+	truncated = len(body) > MAX_RESPONSE_LOG
+	if truncated:
+		body = body[:MAX_RESPONSE_LOG]
+
+	log = {
+		"status_code": response.status_code,
+		"reason": response.reason,
+		"url": response.url,
+		"elapsed_seconds": response.elapsed.total_seconds() if response.elapsed else None,
+		"headers": {
+			k: v for k, v in response.headers.items() if k.lower() not in ("set-cookie", "authorization")
+		},
+		"body": body,
+	}
+	if truncated:
+		log["body_truncated"] = True
+		log["body_length"] = len(response.text or "")
+
+	return frappe.as_json(log)
 
 
 def build_headers(settings):
@@ -353,6 +389,9 @@ def upsert_doc(doctype, docname, payload):
 	payload["name"] = docname
 	target_docstatus = cint(payload.get("docstatus"))
 
+	# Kept aside for restore_audit_fields(); see AUDIT_FIELDS.
+	audit = {field: payload.pop(field, None) for field in AUDIT_FIELDS}
+
 	if frappe.db.exists(doctype, docname):
 		doc = frappe.get_doc(doctype, docname)
 		local_docstatus = cint(doc.docstatus)
@@ -373,6 +412,8 @@ def upsert_doc(doctype, docname, payload):
 			doc.submit()
 		elif target_docstatus == 2 and local_docstatus == 1:
 			doc.cancel()
+
+		restore_audit_fields(doc, audit, is_new=False)
 		return
 
 	# Insert as a draft first so validation runs the same way it did on the
@@ -393,6 +434,56 @@ def upsert_doc(doctype, docname, payload):
 	elif target_docstatus == 2:
 		doc.submit()
 		doc.cancel()
+
+	restore_audit_fields(doc, audit, is_new=True)
+
+
+def resolve_user(email):
+	"""Return the email only if that User exists here, else None."""
+	if email and frappe.db.exists("User", email):
+		return email
+	return None
+
+
+def restore_audit_fields(doc, audit, is_new):
+	"""Stamp the synced document with the user who made the change on the origin
+	server instead of the API user this request authenticated as.
+
+	If that user does not exist on this server the local value is left alone,
+	so the document is never pointed at a User that isn't there.
+	"""
+	values = {}
+
+	modified_by = resolve_user(audit.get("modified_by"))
+	if modified_by:
+		values["modified_by"] = modified_by
+
+	if is_new:
+		owner = resolve_user(audit.get("owner"))
+		if owner:
+			values["owner"] = owner
+		if audit.get("creation"):
+			values["creation"] = audit["creation"]
+
+	if not values:
+		return
+
+	frappe.db.set_value(doc.doctype, doc.name, values, update_modified=False)
+	doc.update(values)
+
+	# Child rows are audited along with their parent.
+	child_values = {k: v for k, v in values.items() if k in ("owner", "modified_by")}
+	if not child_values:
+		return
+
+	for df in doc.meta.get_table_fields():
+		table = frappe.qb.DocType(df.options)
+		query = frappe.qb.update(table).where(
+			(table.parent == doc.name) & (table.parenttype == doc.doctype)
+		)
+		for field, value in child_values.items():
+			query = query.set(table[field], value)
+		query.run()
 
 
 # ---------------------------------------------------------------------------
