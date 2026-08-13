@@ -620,6 +620,10 @@ def test_connection():
 		return {"ok": False, "message": f"{type(e).__name__}: {e}"}
 
 	if response.status_code == 200:
-		return {"ok": True, "message": response.json().get("message")}
+		payload = response.json().get("message") or {}
+		return {
+			"ok": True,
+			"message": payload.get("message", "ok") if isinstance(payload, dict) else str(payload),
+		}
 
 	return {"ok": False, "message": f"HTTP {response.status_code}: {(response.text or '')[:500]}"}

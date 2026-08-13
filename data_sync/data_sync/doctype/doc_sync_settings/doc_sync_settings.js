@@ -3,6 +3,23 @@
 
 frappe.ui.form.on("Doc Sync Settings", {
 	refresh(frm) {
+		// This form contains connection credentials. Prevent the browser from
+		// inserting previously saved values into the settings fields.
+		[
+			"site_identifier",
+			"target_url",
+			"api_key",
+			"api_secret",
+			"max_retries",
+			"request_timeout",
+			"batch_size",
+		].forEach((fieldname) => {
+			const field = frm.fields_dict[fieldname];
+			if (field && field.$input) {
+				field.$input.attr("autocomplete", fieldname === "api_secret" ? "new-password" : "off");
+			}
+		});
+
 		frm.add_custom_button(__("Test Connection"), () => {
 			frappe.call({
 				method: "data_sync.sync.test_connection",
@@ -10,10 +27,13 @@ frappe.ui.form.on("Doc Sync Settings", {
 				freeze_message: __("Contacting target server..."),
 				callback(r) {
 					const res = r.message || {};
+					const message = typeof res.message === "object"
+						? res.message.message || JSON.stringify(res.message)
+						: res.message || (res.ok ? __("Connection successful") : __("Unable to connect"));
 					frappe.msgprint({
 						title: res.ok ? __("Connected") : __("Connection Failed"),
 						indicator: res.ok ? "green" : "red",
-						message: frappe.utils.escape_html(String(res.message)),
+						message: frappe.utils.escape_html(String(message)),
 					});
 				},
 			});
