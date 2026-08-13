@@ -141,6 +141,24 @@ def capture(doc, method=None):
 	if not rule or not is_event_allowed(rule, event):
 		return
 
+	payload = frappe.as_json(build_payload(doc, event))
+
+	# A single request can save the same document more than once - a controller
+	# calling self.save() from inside its own on_update, for instance. Fold the
+	# change into the row that is still waiting to be pushed rather than queue
+	# the same document twice: the payload is the whole document, so refreshing
+	# it means the latest state is what goes out.
+	pending = find_pending_entry(doc.doctype, doc.name, event)
+	if pending:
+		frappe.db.set_value(
+			"Doc Sync Queue",
+			pending,
+			{"payload": payload, "status": "Queued", "error_reason": None},
+			update_modified=False,
+		)
+		enqueue_push(pending)
+		return
+
 	entry = frappe.get_doc(
 		{
 			"doctype": "Doc Sync Queue",
@@ -150,7 +168,7 @@ def capture(doc, method=None):
 			"ref_docname": doc.name,
 			"status": "Queued",
 			"origin_site": settings.site_identifier or frappe.local.site,
-			"payload": frappe.as_json(build_payload(doc, event)),
+			"payload": payload,
 		}
 	)
 	entry.flags.ignore_permissions = True
@@ -161,11 +179,43 @@ def capture(doc, method=None):
 		update_modified=False,
 	)
 
+	enqueue_push(entry.name)
+
+
+def find_pending_entry(doctype, docname, event):
+	"""Name of an Outgoing row for this document that has not been pushed yet.
+
+	A Delete is never merged into an upsert (or the other way round) - the two
+	are not interchangeable. The existing row keeps its own event, so an Insert
+	that is saved again in the same request still goes out as an Insert.
+	"""
+	if event == "Delete":
+		return None
+
+	return frappe.db.get_value(
+		"Doc Sync Queue",
+		{
+			"type": "Outgoing",
+			"status": "Queued",
+			"ref_doctype": doctype,
+			"ref_docname": docname,
+			"event": ["!=", "Delete"],
+		},
+		"name",
+		order_by="creation desc",
+	)
+
+
+def enqueue_push(entry_name):
+	"""Queue the push. `deduplicate` keeps one in-flight job per queue row, so a
+	coalesced row is not pushed twice concurrently."""
 	frappe.enqueue(
 		"data_sync.sync.push_entry",
 		queue="short",
 		enqueue_after_commit=True,
-		entry_name=entry.name,
+		job_id=f"data_sync::push::{entry_name}",
+		deduplicate=True,
+		entry_name=entry_name,
 	)
 
 
