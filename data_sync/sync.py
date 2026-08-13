@@ -16,6 +16,7 @@ import json
 
 import frappe
 import requests
+from frappe.model import child_table_fields, default_fields, table_fields
 from frappe.utils import cint, now_datetime
 
 # Keys that are local to a site or recomputed on save - never shipped.
@@ -418,20 +419,46 @@ def log_incoming(doctype, docname, event, origin_site, idempotency_key, payload)
 	return entry, False
 
 
+def enqueue_apply(entry_name):
+	"""Apply an Incoming row in the background so the sending server gets its
+	response immediately instead of waiting for validation and hooks."""
+	frappe.enqueue(
+		"data_sync.sync.apply_entry",
+		queue="short",
+		job_id=f"data_sync::apply::{entry_name}",
+		deduplicate=True,
+		entry_name=entry_name,
+	)
+
+
 def apply_entry(entry_name):
 	"""Apply one Incoming queue row to the local database."""
 	entry = frappe.get_doc("Doc Sync Queue", entry_name)
-	if entry.type != "Incoming":
+	if entry.type != "Incoming" or entry.status == "Synced":
+		return
+
+	if not frappe.db.exists("DocType", entry.ref_doctype):
+		# Nothing to retry - the DocType simply isn't installed here.
+		entry.db_set(
+			{
+				"status": "Skipped",
+				"error_reason": f"DocType '{entry.ref_doctype}' does not exist on this server",
+				"last_attempt_on": now_datetime(),
+			},
+			update_modified=False,
+		)
+		frappe.db.commit()
 		return
 
 	payload = json.loads(entry.payload) if entry.payload else {}
+	dropped = []
 
 	frappe.flags.in_data_sync = True
 	try:
 		if entry.event == "Delete":
 			delete_doc(entry.ref_doctype, entry.ref_docname)
 		else:
-			upsert_doc(entry.ref_doctype, entry.ref_docname, payload)
+			upsert_doc(entry.ref_doctype, entry.ref_docname, payload, dropped)
 
 		frappe.db.commit()
 		entry.db_set(
@@ -440,6 +467,9 @@ def apply_entry(entry_name):
 				"error_reason": None,
 				"last_attempt_on": now_datetime(),
 				"synced_on": now_datetime(),
+				"response": frappe.as_json(
+					{"ok": True, "applied_on": str(now_datetime()), "dropped_fields": dropped}
+				),
 			},
 			update_modified=False,
 		)
@@ -465,8 +495,45 @@ def delete_doc(doctype, docname):
 	)
 
 
-def upsert_doc(doctype, docname, payload):
+def sanitize_for_local(doctype, data, dropped, prefix=""):
+	"""Keep only the fields this server actually has.
+
+	The two servers can drift - a custom field added on one, an app installed on
+	one and not the other. Anything unknown here is dropped and reported on the
+	queue row instead of failing the whole document.
+	"""
+	meta = frappe.get_meta(doctype)
+	known = set(default_fields) | set(child_table_fields) | {"doctype", "name"}
+
+	out = {}
+	for key, value in (data or {}).items():
+		if key in known:
+			out[key] = value
+			continue
+
+		df = meta.get_field(key)
+		if not df:
+			dropped.append(f"{prefix}{key}")
+			continue
+
+		if df.fieldtype in table_fields:
+			if not frappe.db.exists("DocType", df.options):
+				dropped.append(f"{prefix}{key} (child DocType '{df.options}' missing)")
+				continue
+			out[key] = [
+				sanitize_for_local(df.options, row, dropped, prefix=f"{prefix}{key}.")
+				for row in (value or [])
+				if isinstance(row, dict)
+			]
+		else:
+			out[key] = value
+
+	return out
+
+
+def upsert_doc(doctype, docname, payload, dropped=None):
 	payload = clean_payload(payload)
+	payload = sanitize_for_local(doctype, payload, dropped if dropped is not None else [])
 	payload["doctype"] = doctype
 	payload["name"] = docname
 	target_docstatus = cint(payload.get("docstatus"))
@@ -614,15 +681,18 @@ def retry_entry(entry_name):
 	"""Retry a single queue row from the form. Resets the retry counter."""
 	frappe.only_for("System Manager")
 	entry = frappe.get_doc("Doc Sync Queue", entry_name)
-	entry.db_set({"retry_count": 0, "status": "Queued"}, update_modified=False)
+	entry.db_set(
+		{"retry_count": 0, "status": "Queued", "error_reason": None}, update_modified=False
+	)
 	frappe.db.commit()
 
+	# Runs in the background - a slow target server must not hold up the form.
 	if entry.type == "Outgoing":
-		push_entry(entry.name)
+		enqueue_push(entry.name)
 	else:
-		apply_entry(entry.name)
+		enqueue_apply(entry.name)
 
-	return frappe.db.get_value("Doc Sync Queue", entry_name, ["status", "error_reason"], as_dict=True)
+	return {"queued": True, "name": entry.name}
 
 
 @frappe.whitelist()

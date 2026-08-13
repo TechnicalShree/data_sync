@@ -10,14 +10,10 @@ frappe.ui.form.on("Doc Sync Queue", {
 				frappe.call({
 					method: "data_sync.sync.retry_entry",
 					args: { entry_name: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Retrying..."),
-					callback(r) {
-						const res = r.message || {};
-						frappe.msgprint({
-							title: res.status === "Synced" ? __("Synced") : __("Still Failing"),
-							indicator: res.status === "Synced" ? "green" : "red",
-							message: frappe.utils.escape_html(String(res.error_reason || res.status)),
+					callback() {
+						frappe.show_alert({
+							message: __("Queued in background. Refresh in a moment to see the result."),
+							indicator: "blue",
 						});
 						frm.reload_doc();
 					},

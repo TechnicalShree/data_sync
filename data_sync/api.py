@@ -46,14 +46,18 @@ def receive(doctype, docname, event, origin_site, idempotency_key, payload):
 		payload=payload,
 	)
 
-	if is_duplicate and entry.status == "Synced":
-		return {"ok": True, "duplicate": True, "queue_entry": entry.name}
+	if is_duplicate and entry.status in ("Synced", "Queued"):
+		return {"ok": True, "duplicate": True, "queue_entry": entry.name, "status": entry.status}
 
+	# The change is logged and acknowledged straight away; applying it can be
+	# slow (validation, controller hooks, links) and the sending server must not
+	# sit on an open HTTP request waiting for it.
 	frappe.db.commit()
-	sync.apply_entry(entry.name)
+	sync.enqueue_apply(entry.name)
 
-	result = {"ok": True, "queue_entry": entry.name, "applied_on": now()}
-	entry.db_set("response", frappe.as_json(result), update_modified=False)
-	frappe.db.commit()
-
-	return result
+	return {
+		"ok": True,
+		"accepted": True,
+		"queue_entry": entry.name,
+		"received_on": now(),
+	}
