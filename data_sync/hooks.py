@@ -137,16 +137,29 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+# Every DocType is hooked; data_sync.sync.capture filters down to the DocTypes
+# listed in Doc Sync Settings and ignores changes that arrived from the other
+# server (frappe.flags.in_data_sync).
+doc_events = {
+	"*": {
+		"after_insert": "data_sync.sync.capture",
+		"on_update": "data_sync.sync.capture",
+		"on_submit": "data_sync.sync.capture",
+		"on_cancel": "data_sync.sync.capture",
+		"on_trash": "data_sync.sync.capture",
+	}
+}
 
 # Scheduled Tasks
 # ---------------
+
+scheduler_events = {
+	"cron": {
+		"*/5 * * * *": [
+			"data_sync.sync.retry_failed",
+		]
+	}
+}
 
 # scheduler_events = {
 # 	"all": [

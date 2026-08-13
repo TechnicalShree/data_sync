@@ -2,33 +2,57 @@
  "actions": [],
  "allow_bulk_edit": 1,
  "allow_rename": 1,
+ "autoname": "hash",
  "creation": "2026-08-13 21:28:40.647122",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "type",
+  "event",
   "ref_doctype",
   "ref_docname",
   "column_break_zptw",
   "status",
   "retry_count",
+  "origin_site",
+  "idempotency_key",
+  "error_section",
   "error_reason",
+  "attempt_section",
+  "last_attempt_on",
+  "column_break_attempt",
+  "synced_on",
   "section_break_nlww",
-  "payload"
+  "payload",
+  "response_section",
+  "response"
  ],
  "fields": [
   {
    "default": "Outgoing",
+   "description": "Outgoing = push to target server. Incoming = received from the other server.",
    "fieldname": "type",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Type",
    "options": "Outgoing\nIncoming",
    "reqd": 1
   },
   {
+   "default": "Update",
+   "fieldname": "event",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Event",
+   "options": "Insert\nUpdate\nSubmit\nCancel\nDelete",
+   "reqd": 1
+  },
+  {
    "fieldname": "ref_doctype",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Ref Doctype",
    "options": "DocType",
    "reqd": 1
@@ -36,6 +60,7 @@
   {
    "fieldname": "ref_docname",
    "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
    "label": "Ref Docname",
    "options": "ref_doctype",
    "reqd": 1
@@ -45,9 +70,13 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Queued",
    "fieldname": "status",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Status",
+   "options": "Queued\nSynced\nFailed\nSkipped",
    "read_only": 1
   },
   {
@@ -58,19 +87,77 @@
    "read_only": 1
   },
   {
+   "description": "Server the change originated from",
+   "fieldname": "origin_site",
+   "fieldtype": "Data",
+   "label": "Origin Site",
+   "read_only": 1
+  },
+  {
+   "description": "Unique key per change, used to drop duplicates on the receiving side",
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "depends_on": "error_reason",
+   "fieldname": "error_section",
+   "fieldtype": "Section Break",
+   "label": "Error"
+  },
+  {
    "fieldname": "error_reason",
    "fieldtype": "Small Text",
-   "label": "Error Reason"
+   "label": "Error Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attempt_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "last_attempt_on",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_attempt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "synced_on",
+   "fieldtype": "Datetime",
+   "label": "Synced On",
+   "read_only": 1
   },
   {
    "fieldname": "section_break_nlww",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Payload"
   },
   {
    "fieldname": "payload",
    "fieldtype": "Code",
    "label": "Payload",
+   "options": "JSON",
+   "read_only": 1,
    "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "response_section",
+   "fieldtype": "Section Break",
+   "label": "Response"
+  },
+  {
+   "fieldname": "response",
+   "fieldtype": "Code",
+   "label": "Response",
+   "options": "JSON",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -78,8 +165,8 @@
  "links": [],
  "modified": "2026-08-13 21:38:25.559139",
  "modified_by": "Administrator",
- "module": "Data Sync",
  "name": "Doc Sync Queue",
+ "module": "Data Sync",
  "owner": "Administrator",
  "permissions": [
   {
@@ -99,5 +186,6 @@
  "rows_threshold_for_grid_search": 20,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "ref_doctype"
 }

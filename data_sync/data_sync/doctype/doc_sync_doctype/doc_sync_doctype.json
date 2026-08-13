@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-13 22:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "ref_doctype",
+  "enabled",
+  "column_break_main",
+  "sync_insert",
+  "sync_update",
+  "sync_delete",
+  "sync_submit_cancel"
+ ],
+ "fields": [
+  {
+   "columns": 4,
+   "fieldname": "ref_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "sync_insert",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Insert"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "sync_update",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Update"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "sync_delete",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Delete"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "sync_submit_cancel",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Submit / Cancel"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-13 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Data Sync",
+ "name": "Doc Sync DocType",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -7,9 +7,18 @@
  "engine": "InnoDB",
  "field_order": [
   "enabled",
+  "site_identifier",
   "target_url",
   "column_break_rxcp",
-  "max_retries"
+  "api_key",
+  "api_secret",
+  "max_retries",
+  "retry_section",
+  "request_timeout",
+  "column_break_retry",
+  "batch_size",
+  "doctypes_section",
+  "sync_doctypes"
  ],
  "fields": [
   {
@@ -19,6 +28,13 @@
    "label": "Enabled"
   },
   {
+   "description": "Unique name of THIS server, e.g. <code>server-a</code>. Must be different on each server.",
+   "fieldname": "site_identifier",
+   "fieldtype": "Data",
+   "label": "Site Identifier"
+  },
+  {
+   "description": "Base URL of the OTHER server, e.g. <code>https://server-b.example.com</code>",
    "fieldname": "target_url",
    "fieldtype": "Data",
    "label": "Target URL"
@@ -28,9 +44,59 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "API Key of the sync user on the target server",
+   "fieldname": "api_key",
+   "fieldtype": "Data",
+   "label": "API Key"
+  },
+  {
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "label": "API Secret"
+  },
+  {
+   "default": "5",
    "fieldname": "max_retries",
    "fieldtype": "Int",
-   "label": "Max Retries"
+   "label": "Max Retries",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "retry_section",
+   "fieldtype": "Section Break",
+   "label": "Transport"
+  },
+  {
+   "default": "30",
+   "description": "Seconds to wait for the target server",
+   "fieldname": "request_timeout",
+   "fieldtype": "Int",
+   "label": "Request Timeout",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_retry",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "50",
+   "description": "Rows picked up per scheduled retry run",
+   "fieldname": "batch_size",
+   "fieldtype": "Int",
+   "label": "Batch Size",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "doctypes_section",
+   "fieldtype": "Section Break",
+   "label": "DocTypes To Sync"
+  },
+  {
+   "description": "Only these DocTypes are synced. Leave empty to sync nothing.",
+   "fieldname": "sync_doctypes",
+   "fieldtype": "Table",
+   "label": "Sync DocTypes",
+   "options": "Doc Sync DocType"
   }
  ],
  "grid_page_length": 50,
