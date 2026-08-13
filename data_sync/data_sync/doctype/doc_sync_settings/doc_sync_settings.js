@@ -27,10 +27,13 @@ frappe.ui.form.on("Doc Sync Settings", {
 				freeze_message: __("Contacting target server..."),
 				callback(r) {
 					const res = r.message || {};
+					const message = typeof res.message === "object"
+						? res.message.message || JSON.stringify(res.message)
+						: res.message || (res.ok ? __("Connection successful") : __("Unable to connect"));
 					frappe.msgprint({
 						title: res.ok ? __("Connected") : __("Connection Failed"),
 						indicator: res.ok ? "green" : "red",
-						message: frappe.utils.escape_html(String(res.message)),
+						message: frappe.utils.escape_html(String(message)),
 					});
 				},
 			});
